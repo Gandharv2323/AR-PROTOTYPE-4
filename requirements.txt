@@ -9,9 +9,10 @@ numpy>=1.24.0
 scipy>=1.11.0
 
 # ── Segmentation (SAM 2) ──
-segment-anything-2>=0.1.0
+git+https://github.com/facebookresearch/segment-anything-2.git
 
 # ── 2D Try-On ──
+git+https://github.com/franciszzj/Leffa.git
 diffusers>=0.27.0
 transformers>=4.40.0
 accelerate>=0.29.0
