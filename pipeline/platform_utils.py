@@ -78,7 +78,7 @@ def detect_gpu_info() -> Dict[str, object]:
         info["available"] = True
         info["name"] = torch.cuda.get_device_name(0)
         props = torch.cuda.get_device_properties(0)
-        info["total_memory_gb"] = round(props.total_mem / (1024 ** 3), 2)
+        info["total_memory_gb"] = round(props.total_memory / (1024 ** 3), 2)
         info["is_rocm"] = hasattr(torch.version, "hip") and torch.version.hip is not None
 
         # Precision detection
