@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment files with secrets
+# app/.env is tracked (has no secrets for local dev)
+
+# Data & checkpoints (large files)
+data/arvton/datasets/*/
+data/arvton/checkpoints/*.pt
+data/arvton/checkpoints/*.pth
+data/arvton/outputs/
+outputs/
+uploads/
+
+# Model weights
+*.onnx
+*.safetensors
+
+# Flutter
+arvton_app/.dart_tool/
+arvton_app/.packages
+arvton_app/build/
+arvton_app/.flutter-plugins
+arvton_app/.flutter-plugins-dependencies
+arvton_app/android/.gradle/
+arvton_app/ios/Pods/
+arvton_app/ios/.symlinks/
+arvton_app/web/
+
+# Test images
+test_person.jpg
+test_garment.jpg
+
+# Logs
+*.log
+
+# Sample manifests (auto-generated)
+data/arvton/datasets/train_manifest.json
+data/arvton/datasets/val_manifest.json

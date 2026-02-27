@@ -1,0 +1,126 @@
+# ARVTON Dataset Configuration
+# License: MIT (ARVTON project)
+# Description: Centralized config for all dataset paths, API keys, and processing params.
+
+# ── Platform Detection ──
+# Colab: paths point to /content/drive/MyDrive/arvton/
+# AMD:   paths point to /mnt/storage/arvton/
+# Local: paths point to ./data/arvton/
+
+paths:
+  # Auto-detected at runtime based on platform
+  colab:
+    base: "/content/drive/MyDrive/arvton"
+    datasets: "/content/drive/MyDrive/arvton/datasets"
+    checkpoints: "/content/drive/MyDrive/arvton/checkpoints"
+    outputs: "/content/drive/MyDrive/arvton/outputs"
+  amd:
+    base: "/mnt/storage/arvton"
+    datasets: "/mnt/storage/arvton/datasets"
+    checkpoints: "/mnt/storage/arvton_ckpts"
+    outputs: "/mnt/storage/arvton/outputs"
+  local:
+    base: "./data/arvton"
+    datasets: "./data/arvton/datasets"
+    checkpoints: "./data/arvton/checkpoints"
+    outputs: "./data/arvton/outputs"
+
+# ── API Keys (set via environment variables) ──
+api_keys:
+  pexels: "${PEXELS_API_KEY}"
+  pixabay: "${PIXABAY_API_KEY}"
+
+# ── Source A: ViViD Dataset ──
+vivid:
+  repo_url: "https://github.com/Zheng-Chong/ViViD"
+  license: "Apache-2.0"
+  target_samples: 1000
+  train_split: 0.8
+  val_split: 0.2
+  laplacian_threshold: 100.0  # Minimum sharpness score
+
+# ── Source B: CC0 Web Scraper ──
+cc0:
+  target_pairs: 2000
+  clip_confidence_threshold: 0.75
+  search_queries:
+    garment:
+      - "t-shirt flat lay"
+      - "dress flat lay"
+      - "jeans flat lay"
+      - "hoodie flat lay"
+      - "blazer flat lay"
+      - "skirt flat lay"
+    person:
+      - "fashion model full body"
+      - "person standing white background"
+      - "streetwear model"
+      - "formal wear model"
+      - "casual outfit full body"
+  pages_per_query: 10
+  images_per_page: 80
+
+# ── Source C: Synthetic Generation ──
+synthetic:
+  target_garments: 500
+  target_persons: 500
+  sdxl_model: "stabilityai/stable-diffusion-xl-base-1.0"
+  controlnet_model: "thibaud/controlnet-openpose-sdxl-1.0"
+  colors:
+    - "black"
+    - "white"
+    - "navy"
+    - "red"
+    - "olive"
+    - "beige"
+    - "grey"
+    - "forest green"
+    - "burgundy"
+    - "mustard"
+  materials:
+    - "cotton"
+    - "linen"
+    - "denim"
+    - "silk"
+    - "wool"
+    - "polyester"
+    - "jersey"
+    - "tweed"
+    - "canvas"
+  garment_types:
+    - "t-shirt"
+    - "button-down shirt"
+    - "hoodie"
+    - "blazer"
+    - "dress"
+    - "trousers"
+    - "jeans"
+    - "skirt"
+  body_types:
+    - "slim"
+    - "athletic"
+    - "average"
+    - "plus-size"
+    - "tall"
+  inference_steps: 30
+  guidance_scale: 7.5
+
+# ── SAM 2 Segmentation ──
+sam2:
+  model_id: "facebook/sam2-hiera-large"
+  license: "Apache-2.0"
+  vram_limit_gb: 10.0
+  batch_size: 8
+
+# ── HMR 2.0 Body Estimation ──
+hmr2:
+  model_id: "gzb1-lab/4D-Humans"
+  checkpoint: "hmr2-0b"
+  license: "MIT"
+  confidence_threshold: 0.5
+
+# ── Processing ──
+processing:
+  image_size: [768, 1024]  # width x height
+  num_workers: 8
+  prefetch_factor: 2

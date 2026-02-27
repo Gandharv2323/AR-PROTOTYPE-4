@@ -1,0 +1,60 @@
+# ARVTON — AR/VR Virtual Try-On Pipeline
+# License: MIT (ARVTON project)
+# Platform: Colab (T4/A100) and AMD ROCm (MI250/MI300)
+
+# ── Core ML ──
+torch>=2.3.0
+torchvision>=0.18.0
+numpy>=1.24.0
+scipy>=1.11.0
+
+# ── Segmentation (SAM 2) ──
+segment-anything-2>=0.1.0
+
+# ── 2D Try-On ──
+diffusers>=0.27.0
+transformers>=4.40.0
+accelerate>=0.29.0
+
+# ── CLIP classification ──
+open-clip-torch>=2.24.0
+ftfy>=6.1.0
+
+# ── 3D Reconstruction ──
+# 4D-Humans (HMR 2.0) — install via: pip install 4D-Humans
+trimesh>=4.3.0
+pymeshlab>=2023.12
+xatlas>=0.0.8
+
+# ── GLB Export ──
+# tsr (TripoSR) — install via: pip install tsr
+pygltflib>=1.16.0
+
+# ── Image Generation (Synthetic) ──
+# diffusers already listed above covers SDXL + ControlNet
+
+# ── Image Processing ──
+opencv-python-headless>=4.9.0
+Pillow>=10.3.0
+scikit-image>=0.22.0
+
+# ── API / Backend ──
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+slowapi>=0.1.9
+
+# ── HTTP clients ──
+requests>=2.31.0
+httpx>=0.27.0
+aiohttp>=3.9.0
+
+# ── Training & Evaluation ──
+tensorboard>=2.16.0
+lpips>=0.1.4
+
+# ── Utilities ──
+pyyaml>=6.0.1
+python-dotenv>=1.0.1
+tqdm>=4.66.0
+colorama>=0.4.6
