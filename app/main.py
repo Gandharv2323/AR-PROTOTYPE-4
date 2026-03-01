@@ -237,9 +237,21 @@ async def create_tryon(
     garment_path = save_upload(garment_content, job_id, "garment.jpg")
 
     # Create job
-    job = await job_store.create(person_path, garment_path, quality)
-    # Override the auto-generated ID with our pre-created one
+job = await job_store.create(person_path, garment_path, quality)
+    # Store the generated job ID
+    generated_id = job.job_id
+    # Override the job_id to the pre-generated one and update the store mapping
     job.job_id = job_id
+    # Replace the entry in the JobStore dictionary with the correct key
+    async def _replace_job_key():
+        async with job_store._lock:
+            # Remove old entry if present
+            if generated_id in job_store._jobs:
+                del job_store._jobs[generated_id]
+            job_store._jobs[job_id] = job
+    import asyncio
+    asyncio.create_task(_replace_job_key())
+
 
     # Enqueue pipeline
     from app.jobs.worker import enqueue_job

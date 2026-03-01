@@ -74,9 +74,13 @@ class JobStore:
         person_path: str,
         garment_path: str,
         quality: str = "auto",
+        job_id: Optional[str] = None,
     ) -> Job:
-        """Create a new job and return it."""
-        job_id = str(uuid.uuid4())
+        """Create a new job and return it.
+        If job_id is provided, use it as the identifier; otherwise generate a new UUID.
+        """
+        if job_id is None:
+            job_id = str(uuid.uuid4())
         job = Job(
             job_id=job_id,
             person_path=person_path,
@@ -142,10 +146,7 @@ class JobStore:
     async def queue_length(self) -> int:
         """Number of queued jobs."""
         async with self._lock:
-            return sum(
-                1 for j in self._jobs.values()
-                if j.status == JobStatus.QUEUED
-            )
+            return sum(1 for j in self._jobs.values() if j.status == JobStatus.QUEUED)
 
     async def last_n_jobs(self, n: int = 5) -> List[Dict[str, Any]]:
         """Get summaries of the last N jobs."""
