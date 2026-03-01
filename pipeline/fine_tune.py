@@ -200,6 +200,8 @@ def train(
     checkpoint_dir: str = "checkpoints",
     save_every: int = 10,
     gradient_checkpointing: bool = True,
+    early_stopping_patience: int = 15,
+    grad_clip_norm: float = 1.0,
 ) -> Dict[str, List[float]]:
     """
     Fine-tuning training loop with LoRA, mixed precision, and gradient checkpointing.
@@ -231,6 +233,10 @@ def train(
         model.gradient_checkpointing_enable()
         logger.info("Gradient checkpointing enabled.")
 
+    # Early stopping
+    early_stopping = EarlyStopping(patience=early_stopping_patience, min_delta=1e-4)
+    logger.info(f"Early stopping: patience={early_stopping_patience}")
+
     model = model.to(device)
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
@@ -240,7 +246,7 @@ def train(
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     # Loss function
-    from pipeline.refine import TryOnCombinedLoss
+    from pipeline.refine import TryOnCombinedLoss, EarlyStopping, clip_gradients
     criterion = TryOnCombinedLoss(device=device)
 
     scaler = torch.amp.GradScaler("cuda") if use_amp else None
@@ -268,6 +274,8 @@ def train(
                     losses = criterion(outputs, gt)
 
                 scaler.scale(losses["total"]).backward()
+                scaler.unscale_(optimizer)
+                clip_gradients(model, max_norm=grad_clip_norm)
                 scaler.step(optimizer)
                 scaler.update()
             else:
@@ -315,6 +323,12 @@ def train(
 
             avg_val = val_loss / max(val_batches, 1)
             history["val_loss"].append(avg_val)
+            
+            # Early stopping check
+            if early_stopping(avg_val):
+                logger.info(f"Early stopping triggered at epoch {epoch}")
+                break
+            
             logger.info(
                 "Epoch %d/%d — Train: %.4f, Val: %.4f",
                 epoch, epochs, avg_loss, avg_val,
@@ -359,6 +373,8 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--lora-rank", type=int, default=16)
+    parser.add_argument("--early-stop-patience", type=int, default=15)
+    parser.add_argument("--grad-clip-norm", type=float, default=1.0)
     args = parser.parse_args()
 
     setup_logging("INFO")
@@ -386,6 +402,8 @@ if __name__ == "__main__":
         learning_rate=args.lr,
         device=args.device,
         checkpoint_dir=str(paths["checkpoints"] / "finetune"),
+        early_stopping_patience=args.early_stop_patience,
+        grad_clip_norm=args.grad_clip_norm,
     )
 
     print(f"\nPhase 6 complete. Final train loss: {history['train_loss'][-1]:.4f}")

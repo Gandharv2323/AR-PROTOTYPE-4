@@ -26,10 +26,12 @@ Training and inference functions included.
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from torch.utils.data import Dataset, DataLoader
 
 import numpy as np
 import torch
 import torch.nn as nn
+import math
 import torch.nn.functional as F
 from PIL import Image
 
@@ -325,6 +327,220 @@ class TryOnCombinedLoss(nn.Module):
 
         losses["total"] = sum(losses.values())
         return losses
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# EARLY STOPPING
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class EarlyStopping:
+    """
+    Early stopping to prevent overfitting.
+    Monitors validation loss and stops if no improvement for patience epochs.
+    """
+
+    def __init__(
+        self,
+        patience: int = 15,
+        min_delta: float = 1e-4,
+        mode: str = "min",
+    ):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.mode = mode
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+
+    def __call__(self, metric: float) -> bool:
+        if self.best_score is None:
+            self.best_score = metric
+            return False
+
+        if self.mode == "min":
+            improved = metric < (self.best_score - self.min_delta)
+        else:
+            improved = metric > (self.best_score + self.min_delta)
+
+        if improved:
+            self.best_score = metric
+            self.counter = 0
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+                return True
+        return False
+
+    def reset(self):
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# EXPONENTIAL MOVING AVERAGE (EMA)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class ExponentialMovingAverage:
+    """
+    EMA for model weights - provides stable inference.
+    """
+
+    def __init__(self, model: nn.Module, decay: float = 0.999, device: Optional[str] = None):
+        self.model = model
+        self.decay = decay
+        self.device = device or next(model.parameters()).device
+        self.shadow = {}
+        self.backup = {}
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                self.shadow[name] = param.data.clone().to(self.device)
+
+    def update(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                new_average = self.decay * self.shadow[name] + (1.0 - self.decay) * param.data
+                self.shadow[name] = new_average.clone()
+
+    def apply_shadow(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                self.backup[name] = param.data.clone()
+                param.data = self.shadow[name].clone().to(param.device)
+
+    def restore(self):
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                param.data = self.backup[name].clone()
+        self.backup = {}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# GRADIENT CLIPPING UTILITY
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def clip_gradients(model: nn.Module, max_norm: float = 1.0, norm_type: float = 2.0) -> float:
+    """Clip gradients by global norm."""
+    return torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm, norm_type).item()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# LEARNING RATE SCHEDULERS
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class WarmupScheduler:
+    """
+    Linear warmup scheduler that gradually increases learning rate.
+    """
+
+    def __init__(
+        self,
+        optimizer: torch.optim.Optimizer,
+        warmup_epochs: int = 5,
+        base_lr: float = 1e-4,
+    ):
+        self.optimizer = optimizer
+        self.warmup_epochs = warmup_epochs
+        self.base_lr = base_lr
+        self.current_epoch = 0
+
+    def step(self, epoch: Optional[int] = None):
+        """Update learning rate based on warmup progress."""
+        if epoch is not None:
+            self.current_epoch = epoch
+        
+        if self.current_epoch < self.warmup_epochs:
+            # Linear warmup
+            factor = (self.current_epoch + 1) / self.warmup_epochs
+            for param_group in self.optimizer.param_groups:
+                param_group['lr'] = self.base_lr * factor
+        
+        self.current_epoch += 1
+
+
+def get_cosine_schedule_with_warmup(
+    optimizer: torch.optim.Optimizer,
+    num_warmup_steps: int,
+    num_training_steps: int,
+    num_cycles: float = 0.5,
+):
+    """
+    Create a schedule with linear warmup and cosine annealing.
+    """
+    def lr_lambda(current_step):
+        if current_step < num_warmup_steps:
+            return float(current_step) / float(max(1, num_warmup_steps))
+        progress = float(current_step - num_warmup_steps) / float(
+            max(1, num_training_steps - num_warmup_steps)
+        )
+        return max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
+    
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SPECTRAL NORMALIZATION
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class SpectralNormWrapper(nn.Module):
+    """
+    Wrapper to apply spectral normalization to a layer.
+    Improves training stability of GANs.
+    """
+
+    def __init__(self, layer: nn.Module, n_power_iterations: int = 1):
+        super().__init__()
+        self.layer = layer
+        self.sn = nn.utils.spectral_norm(layer, n_power_iterations=n_power_iterations)
+
+    def forward(self, x):
+        return self.sn(x)
+
+
+def apply_spectral_norm(module: nn.Module) -> nn.Module:
+    """
+    Apply spectral normalization to all Conv2d and Linear layers.
+    """
+    for name, layer in module.named_children():
+        if isinstance(layer, (nn.Conv2d, nn.Linear)):
+            setattr(module, name, SpectralNormWrapper(layer))
+        else:
+            apply_spectral_norm(layer)
+    return module
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# DATALOADER OPTIMIZATIONS
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def create_optimized_dataloader(
+    dataset: Dataset,
+    batch_size: int,
+    num_workers: int = 4,
+    pin_memory: bool = True,
+    prefetch_factor: int = 2,
+    persistent_workers: bool = True,
+) -> DataLoader:
+    """
+    Create an optimized DataLoader with prefetching and memory pinning.
+    """
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        prefetch_factor=prefetch_factor,
+        persistent_workers=persistent_workers if num_workers > 0 else False,
+        drop_last=True,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════

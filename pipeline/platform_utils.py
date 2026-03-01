@@ -298,3 +298,60 @@ def print_system_info() -> None:
     print(f"  VRAM:      {gpu['total_memory_gb']} GB")
     print(f"  Precision: {gpu['recommended_precision']}")
     print("=" * 60)
+
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# CACHE UTILITIES
+# ═══════════════════════════════════════════════════════════════════════
+
+import hashlib
+import json
+from functools import wraps
+from typing import Any, Callable
+
+
+def file_cache(cache_dir: str = ".cache"):
+    """Decorator to cache function results to disk."""
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            cache_path = Path(cache_dir) / "func_cache"
+            cache_path.mkdir(parents=True, exist_ok=True)
+            
+            cache_key = hashlib.md5(str(args).encode() + str(kwargs).encode()).hexdigest()
+            cached_file = cache_path / f"{func.__name__}_{cache_key}.json"
+            
+            if cached_file.exists():
+                with open(cached_file) as f:
+                    return json.load(f)
+            
+            result = func(*args, **kwargs)
+            try:
+                with open(cached_file, 'w') as f:
+                    json.dump(result, f)
+            except (TypeError, ValueError):
+                pass
+            return result
+        return wrapper
+    return decorator
+
+
+def clear_cache(cache_dir: str = ".cache"):
+    """Clear all cached files."""
+    cache_path = Path(cache_dir)
+    if cache_path.exists():
+        import shutil
+        shutil.rmtree(cache_path)
+
+
+def get_cache_size(cache_dir: str = ".cache") -> int:
+    """Get total size of cache in bytes."""
+    cache_path = Path(cache_dir)
+    if not cache_path.exists():
+        return 0
+    total = 0
+    for f in cache_path.rglob("*"):
+        if f.is_file():
+            total += f.stat().st_size
+    return total

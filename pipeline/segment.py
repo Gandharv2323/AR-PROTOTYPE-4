@@ -36,6 +36,70 @@ logger = logging.getLogger("arvton.segment")
 _sam2_model = None
 _sam2_device = None
 
+# Cache for segmentation results to avoid re-processing
+_segmentation_cache = {}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SEGMENTATION CACHE
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def get_cached_segmentation(image_path: str, cache_dir: Optional[str] = None) -> Optional[Image.Image]:
+    """
+    Get cached segmentation result if available.
+    
+    Args:
+        image_path: Original image path.
+        cache_dir: Directory to store cached results.
+    
+    Returns:
+        Cached result or None.
+    """
+    cache_key = str(Path(image_path).resolve())
+    
+    # Check memory cache
+    if cache_key in _segmentation_cache:
+        logger.debug("Using memory cache for: %s", Path(image_path).name)
+        return _segmentation_cache[cache_key]
+    
+    # Check disk cache
+    if cache_dir:
+        cache_path = Path(cache_dir) / f"{Path(image_path).stem}_mask.png"
+        if cache_path.exists():
+            logger.debug("Using disk cache for: %s", cache_path.name)
+            result = Image.open(cache_path)
+            _segmentation_cache[cache_key] = result
+            return result
+    
+    return None
+
+
+def cache_segmentation(image_path: str, result: Image.Image, cache_dir: Optional[str] = None):
+    """
+    Cache segmentation result to memory and optionally to disk.
+    
+    Args:
+        image_path: Original image path.
+        result: Segmented image.
+        cache_dir: Directory to store cached results.
+    """
+    cache_key = str(Path(image_path).resolve())
+    _segmentation_cache[cache_key] = result
+    
+    if cache_dir:
+        cache_path = Path(cache_dir) / f"{Path(image_path).stem}_mask.png"
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        result.save(cache_path)
+        logger.debug("Cached segmentation to: %s", cache_path)
+
+
+def clear_segmentation_cache():
+    """Clear the segmentation cache."""
+    global _segmentation_cache
+    _segmentation_cache.clear()
+    logger.info("Segmentation cache cleared")
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # MODEL LOADING
@@ -147,6 +211,8 @@ def segment_garment(
     image_path: str,
     checkpoint_dir: Optional[str] = None,
     device: str = "cuda",
+    cache_dir: Optional[str] = None,
+    use_cache: bool = True,
 ) -> Image.Image:
     """
     Remove background from a garment flat-lay image.
@@ -177,6 +243,13 @@ def segment_garment(
         raise FileNotFoundError(f"Garment image not found: {image_path}")
 
     logger.info("Segmenting garment: %s", image_path.name)
+    
+    # Check cache first
+    if use_cache:
+        cached = get_cached_segmentation(str(image_path), cache_dir)
+        if cached is not None:
+            logger.info("Using cached segmentation for: %s", image_path.name)
+            return cached
 
     # Load image
     image_bgr = cv2.imread(str(image_path))
@@ -275,6 +348,11 @@ def segment_garment(
         image_path.name,
         int(np.sum(alpha_final > 127)),
     )
+    
+    # Cache result
+    if use_cache:
+        cache_segmentation(str(image_path), result, cache_dir)
+    
     return result
 
 

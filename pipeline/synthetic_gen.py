@@ -774,3 +774,38 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def generate_batch(
+    pipeline,
+    prompts: list,
+    output_dir: str,
+    batch_size: int = 4,
+    **kwargs,
+) -> list:
+    """
+    Generate multiple images in batches for efficiency.
+    """
+    from pathlib import Path
+    from tqdm import tqdm
+    
+    results = []
+    total = len(prompts)
+    
+    for i in tqdm(range(0, total, batch_size), desc="Batch generation"):
+        batch_prompts = prompts[i:i + batch_size]
+        
+        try:
+            outputs = pipeline(batch_prompts, num_images_per_prompt=1, **kwargs)
+                
+            for j, img in enumerate(outputs.images):
+                img_idx = i + j
+                img_path = Path(output_dir) / f"synthetic_{img_idx:04d}.jpg"
+                img.save(img_path, quality=95)
+                results.append({"prompt": batch_prompts[j], "path": str(img_path)})
+                    
+        except Exception as e:
+            logger.error("Batch generation failed: %s", str(e))
+    
+    logger.info("Batch generation: %d/%d images", len(results), total)
+    return results
