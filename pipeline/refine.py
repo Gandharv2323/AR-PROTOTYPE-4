@@ -121,7 +121,7 @@ class RefineGenerator(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Encoder
+        # ── Encoder ──────────────────────────────────
         e1 = self.enc1(x)
         e2 = self.enc2(e1)
         e3 = self.enc3(e2)
@@ -133,16 +133,22 @@ class RefineGenerator(nn.Module):
         # Bottleneck
         b = self.bottleneck(e7)
 
-        # Decoder with skip connections
-        d1 = self.dec1(b)
-        d2 = self.dec2(torch.cat([d1, e7], dim=1))
-        d3 = self.dec3(torch.cat([d2, e6], dim=1))
-        d4 = self.dec4(torch.cat([d3, e5], dim=1))
-        d5 = self.dec5(torch.cat([d4, e4], dim=1))
-        d6 = self.dec6(torch.cat([d5, e3], dim=1))
-        d7 = self.dec7(torch.cat([d6, e2], dim=1))
+        # Helper: crop skip to match decoder spatial size
+        def _match(feat: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
+            _, _, h, w = feat.shape
+            return skip[:, :, :h, :w]
 
-        return self.final(torch.cat([d7, e1], dim=1))
+        # ── Decoder with size-safe skip connections ───
+        d1 = self.dec1(b)
+        d2 = self.dec2(torch.cat([d1, _match(d1, e7)], dim=1))
+        d3 = self.dec3(torch.cat([d2, _match(d2, e6)], dim=1))
+        d4 = self.dec4(torch.cat([d3, _match(d3, e5)], dim=1))
+        d5 = self.dec5(torch.cat([d4, _match(d4, e4)], dim=1))
+        d6 = self.dec6(torch.cat([d5, _match(d5, e3)], dim=1))
+        d7 = self.dec7(torch.cat([d6, _match(d6, e2)], dim=1))
+
+        return self.final(torch.cat([d7, _match(d7, e1)], dim=1))
+
 
 
 # ═══════════════════════════════════════════════════════════════════════
