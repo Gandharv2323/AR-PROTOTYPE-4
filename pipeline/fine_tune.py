@@ -56,10 +56,20 @@ class TryOnDataset(Dataset):
         augment: bool = True,
     ):
         with open(manifest_path, "r", encoding="utf-8") as f:
-            self.records = json.load(f)
+            raw = json.load(f)
 
-        self.image_size = image_size
-        self.augment = augment
+        # Normalize: handle list, {"entries": [...]}, or dict with arbitrary keys
+        if isinstance(raw, list):
+            self.records = raw
+        elif isinstance(raw, dict):
+            if "entries" in raw:
+                self.records = raw["entries"]
+            else:
+                # Dict with numeric/string keys — convert values to list
+                self.records = list(raw.values())
+        else:
+            self.records = []
+
         logger.info("TryOnDataset: %d records from %s", len(self.records), manifest_path)
 
     def __len__(self) -> int:
