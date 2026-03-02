@@ -10,8 +10,8 @@
 paths:
   # Auto-detected at runtime based on platform
   colab:
-    base: "/content/AR-PROTOTYPE-4/data/arvton"
-    datasets: "/content/AR-PROTOTYPE-4/data/arvton/datasets"
+    base: "/content/drive/MyDrive/ARVTON"
+    datasets: "/content/drive/MyDrive/ARVTON/datasets"
     checkpoints: "/content/drive/MyDrive/ARVTON/checkpoints"
     outputs: "/content/drive/MyDrive/ARVTON/outputs"
   amd:
