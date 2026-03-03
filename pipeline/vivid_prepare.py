@@ -700,12 +700,19 @@ def download_vivid_dataset(target_dir: str) -> bool:
 
     try:
         # Clone the ViViD repository
+        # Inject GITHUB_TOKEN if available (required in Colab subprocesses)
+        _token = os.environ.get("GITHUB_TOKEN", "").strip()
         repo_url = "https://github.com/Zheng-Chong/ViViD.git"
+        clone_url = (
+            f"https://{_token}@github.com/Zheng-Chong/ViViD.git"
+            if _token
+            else repo_url
+        )
         clone_dir = target_path / "ViViD"
 
         if not clone_dir.exists():
             subprocess.run(
-                ["git", "clone", "--depth", "1", repo_url, str(clone_dir)],
+                ["git", "clone", "--depth", "1", clone_url, str(clone_dir)],
                 check=True,
                 capture_output=True,
                 text=True,
