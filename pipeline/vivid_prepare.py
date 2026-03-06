@@ -703,17 +703,18 @@ def download_vivid_dataset(target_dir: str) -> bool:
         vvt_drive_id = "1mQaHP99c4CWLrVjPZEL_07OnW26z8xs2"
         vvt_zip_path = target_path / "vvt.zip"
 
-        # Check if gdown is installed
-        try:
-            import gdown
-        except ImportError:
-            logger.info("Installing gdown for Google Drive download...")
-            subprocess.run([sys.executable, "-m", "pip", "install", "-q", "gdown"], check=True)
-            import gdown
+        # Ensure latest gdown is installed (Colab default fails on large files)
+        logger.info("Updating gdown & ensuring trimesh for 3D meshes...")
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--upgrade", "gdown", "trimesh"], check=True)
+
+        # If a corrupted small HTML file was downloaded previously, delete it
+        if vvt_zip_path.exists() and vvt_zip_path.stat().st_size < 1024 * 1024:
+            logger.warning("Found corrupted VVT zip (size < 1MB, likely HTML error page). Deleting...")
+            vvt_zip_path.unlink()
 
         if not vvt_zip_path.exists():
             logger.info("Downloading VVT dataset zip from Google Drive (this may take a while)...")
-            gdown.download(id=vvt_drive_id, output=str(vvt_zip_path), quiet=False)
+            subprocess.run(["gdown", vvt_drive_id, "-O", str(vvt_zip_path)], check=True)
 
         if vvt_zip_path.exists():
             logger.info("Extracting VVT dataset...")
