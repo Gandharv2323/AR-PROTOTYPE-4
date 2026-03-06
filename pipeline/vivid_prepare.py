@@ -679,7 +679,7 @@ def generate_densepose_map(
 
 def download_vivid_dataset(target_dir: str) -> bool:
     """
-    Download and extract the ViViD dataset from its GitHub repository.
+    Download and extract the VVT dataset (ViViD replacement) from Google Drive.
 
     Args:
         target_dir: Directory to extract the dataset to.
@@ -693,71 +693,51 @@ def download_vivid_dataset(target_dir: str) -> bool:
     # Check if already downloaded
     marker_file = target_path / ".download_complete"
     if marker_file.exists():
-        logger.info("ViViD dataset already downloaded at %s", target_dir)
+        logger.info("VVT dataset already downloaded at %s", target_dir)
         return True
 
-    logger.info("Downloading ViViD dataset to %s", target_dir)
+    logger.info("Downloading VVT dataset to %s", target_dir)
 
     try:
-        # Clone the ViViD repository
-        # Inject GITHUB_TOKEN if available (required in Colab subprocesses)
-        _token = os.environ.get("GITHUB_TOKEN", "").strip()
-        repo_url = "https://github.com/Zheng-Chong/ViViD.git"
-        clone_url = (
-            f"https://{_token}@github.com/Zheng-Chong/ViViD.git"
-            if _token
-            else repo_url
-        )
-        clone_dir = target_path / "ViViD"
+        # VVT Google Drive Link from CatV2TON repository
+        vvt_drive_id = "1mQaHP99c4CWLrVjPZEL_07OnW26z8xs2"
+        vvt_zip_path = target_path / "vvt.zip"
 
-        if not clone_dir.exists():
-            subprocess.run(
-                ["git", "clone", "--depth", "1", clone_url, str(clone_dir)],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            logger.info("ViViD repository cloned successfully")
-        else:
-            logger.info("ViViD repository already exists at %s", clone_dir)
+        # Check if gdown is installed
+        try:
+            import gdown
+        except ImportError:
+            logger.info("Installing gdown for Google Drive download...")
+            subprocess.run([sys.executable, "-m", "pip", "install", "-q", "gdown"], check=True)
+            import gdown
 
-        # The ViViD dataset provides download links in its README
-        # We need to follow their data download instructions
-        # For the actual dataset files (videos + garments), check the repo's data/ directory
-        data_dir = clone_dir / "data"
-        if not data_dir.exists():
-            # ViViD may use Google Drive or HuggingFace for large files
-            # Try HuggingFace first
+        if not vvt_zip_path.exists():
+            logger.info("Downloading VVT dataset zip from Google Drive (this may take a while)...")
+            gdown.download(id=vvt_drive_id, output=str(vvt_zip_path), quiet=False)
+
+        if vvt_zip_path.exists():
+            logger.info("Extracting VVT dataset...")
+            import zipfile
+            with zipfile.ZipFile(vvt_zip_path, 'r') as zip_ref:
+                zip_ref.extractall(target_path)
+            
+            # Create necessary subdirectories if they didn't exist in the zip
+            (target_path / "videos").mkdir(exist_ok=True)
+            (target_path / "garments").mkdir(exist_ok=True)
+
+            marker_file.touch()
+            # Clean up zip to save space
             try:
-                from huggingface_hub import snapshot_download
-                snapshot_download(
-                    repo_id="Zheng-Chong/ViViD",
-                    local_dir=str(target_path / "hf_data"),
-                    repo_type="dataset",
-                    allow_patterns=["*.mp4", "*.jpg", "*.png", "*.json"],
-                )
-                logger.info("ViViD data downloaded from HuggingFace")
-            except Exception as hf_err:
-                logger.warning(
-                    "HuggingFace download failed: %s. "
-                    "Please download the ViViD dataset manually following "
-                    "instructions at %s and place files in %s",
-                    hf_err,
-                    repo_url,
-                    target_dir,
-                )
-                # Create the data directory structure so processing can continue
-                (target_path / "videos").mkdir(exist_ok=True)
-                (target_path / "garments").mkdir(exist_ok=True)
+                vvt_zip_path.unlink()
+            except Exception:
+                pass
+            return True
+        else:
+            logger.error("Download failed to produce zip file")
+            return False
 
-        marker_file.touch()
-        return True
-
-    except subprocess.CalledProcessError as e:
-        logger.error("Git clone failed: %s", e.stderr)
-        return False
     except Exception as e:
-        logger.error("ViViD download failed: %s", str(e))
+        logger.error("VVT download failed: %s", str(e))
         return False
 
 

@@ -238,16 +238,51 @@ def mount_google_drive() -> bool:
     """
     Mount Google Drive if running on Colab.
 
+    When pipeline modules are invoked as subprocesses (e.g. via
+    ``!python -m pipeline.vivid_prepare``), the Colab IPython kernel is not
+    reachable and ``drive.mount()`` raises ``AttributeError: 'NoneType' object
+    has no attribute 'kernel'``.  To avoid this the function:
+
+    1. Returns True immediately if ``/content/drive`` is already mounted
+       (the notebook's Step-3 cell always mounts it before running pipelines).
+    2. Skips the mount with a warning (not an error) when running in a
+       subprocess, so the pipeline can continue using paths from env-vars.
+
     Returns:
-        bool: True if mounted successfully, False if not on Colab.
+        bool: True if Drive is (or already was) mounted, False otherwise.
     """
     if detect_platform() != "colab":
         return False
 
+    drive_root = "/content/drive"
+
+    # Fast path: Drive already mounted — nothing to do.
+    if os.path.ismount(drive_root):
+        logger.info("Google Drive already mounted at %s", drive_root)
+        return True
+
+    # Detect subprocess context: IPython is absent or has no active kernel.
+    in_subprocess = True
+    try:
+        ip = get_ipython()  # type: ignore[name-defined]  # noqa: F821
+        if ip is not None and hasattr(ip, "kernel"):
+            in_subprocess = False
+    except NameError:
+        pass  # get_ipython not defined → definitely a subprocess
+
+    if in_subprocess:
+        logger.warning(
+            "Google Drive not mounted and cannot mount from a subprocess. "
+            "Drive should be mounted by the Colab notebook before running "
+            "pipeline scripts.  Continuing — paths from ARVTON_DRIVE_DATA "
+            "env-var will be used."
+        )
+        return False
+
     try:
         from google.colab import drive
-        drive.mount("/content/drive", force_remount=False)
-        logger.info("Google Drive mounted at /content/drive")
+        drive.mount(drive_root, force_remount=False)
+        logger.info("Google Drive mounted at %s", drive_root)
         return True
     except Exception as e:
         logger.error("Failed to mount Google Drive: %s", e)

@@ -160,13 +160,17 @@ class PixabayClient:
         self.api_key = api_key
         self.session = requests.Session()
 
+    # Pixabay free API hard limit: only the first 500 results are accessible
+    # regardless of total_hits. Attempting page > (500 // per_page) gives 400.
+    PIXABAY_MAX_ACCESSIBLE = 500
+
     def search(
         self,
         query: str,
         per_page: int = 100,
         page: int = 1,
         image_type: str = "photo",
-    ) -> List[Dict[str, Any]]:
+    ) -> Tuple[List[Dict[str, Any]], int]:
         """
         Search for images on Pixabay.
 
@@ -177,12 +181,13 @@ class PixabayClient:
             image_type: 'photo', 'illustration', or 'vector'.
 
         Returns:
-            List of image metadata dicts with download URLs.
+            Tuple of (image metadata list, total_hits reported by API).
         """
+        per_page = min(per_page, 200)
         params = {
             "key": self.api_key,
             "q": query,
-            "per_page": min(per_page, 200),
+            "per_page": per_page,
             "page": page,
             "image_type": image_type,
             "safesearch": "true",
@@ -199,6 +204,7 @@ class PixabayClient:
             response.raise_for_status()
             data = response.json()
 
+            total_hits = data.get("totalHits", 0)
             results = []
             for hit in data.get("hits", []):
                 results.append({
@@ -213,12 +219,15 @@ class PixabayClient:
                     "query": query,
                 })
 
-            logger.debug("Pixabay: '%s' page %d returned %d results", query, page, len(results))
-            return results
+            logger.debug(
+                "Pixabay: '%s' page %d returned %d results (total_hits=%d)",
+                query, page, len(results), total_hits,
+            )
+            return results, total_hits
 
         except requests.RequestException as e:
             logger.error("Pixabay API error for query '%s': %s", query, str(e))
-            return []
+            return [], 0
 
     def search_all_pages(
         self,
@@ -227,7 +236,7 @@ class PixabayClient:
         per_page: int = 100,
     ) -> List[Dict[str, Any]]:
         """
-        Search across multiple pages.
+        Search across multiple pages, respecting Pixabay's 500-result cap.
 
         Args:
             query: Search term.
@@ -237,12 +246,23 @@ class PixabayClient:
         Returns:
             Aggregated list of image metadata dicts.
         """
+        per_page = min(per_page, 200)
+        # Pixabay only allows accessing the first PIXABAY_MAX_ACCESSIBLE results.
+        max_accessible_pages = self.PIXABAY_MAX_ACCESSIBLE // per_page
+        effective_max_pages = min(max_pages, max_accessible_pages)
+
         all_results = []
-        for page in range(1, max_pages + 1):
-            results = self.search(query, per_page=per_page, page=page)
+        for page in range(1, effective_max_pages + 1):
+            results, total_hits = self.search(query, per_page=per_page, page=page)
             if not results:
                 break
             all_results.extend(results)
+
+            # Stop early if we've collected all available results
+            accessible = min(total_hits, self.PIXABAY_MAX_ACCESSIBLE)
+            if len(all_results) >= accessible:
+                break
+
             time.sleep(0.5)  # Rate limiting courtesy
 
         logger.info("Pixabay total for '%s': %d images", query, len(all_results))
